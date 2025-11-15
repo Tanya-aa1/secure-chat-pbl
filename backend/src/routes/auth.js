@@ -97,7 +97,11 @@ router.get("/me/privateKey", async (req, res) => {
     const user = await User.findById(payload.id);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    res.json({ privateKeyEncrypted: user.privateKeyEncrypted });
+    res.json({ 
+  privateKeyEncrypted: user.privateKeyEncrypted,
+  username: user.username
+});
+
   } catch (err) {
     console.error("❌ Private key fetch error:", err);
     res.status(401).json({ error: "Invalid or expired token" });

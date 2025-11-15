@@ -15,6 +15,18 @@ export default function ChatWindow({ socket, me, other, messages, setMessages, r
     // We will prompt the user for their password to decrypt locally.
   }, [])
 
+ 
+
+useEffect(() => {
+  socket.on("receive_message", (msg) => {
+    setMessages((prev) => [...prev, msg])
+  })
+
+  return () => socket.off("receive_message")
+}, [])
+
+
+
   async function promptAndLoadPrivateKey() {
     try{
       setLoadingKey(true)
@@ -23,7 +35,7 @@ export default function ChatWindow({ socket, me, other, messages, setMessages, r
       const token = localStorage.getItem('token')
       // fetch current user id via token decode is not done here — we'll call /api/auth/me? (not implemented)
       // Instead, we rely on a simple endpoint: GET /api/auth/mePrivate which returns privateKeyEncrypted for the authenticated user.
-      const res = await axios.get(`${API}/api/auth/mePrivate`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+      const res = await axios.get(`${API}/api/auth/me/privateKey`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
       const privateKeyEncryptedObj = res.data.privateKeyEncrypted
       // privateKeyEncryptedObj is expected: { iv: base64, ct: base64 }
       const pem = await decryptPrivateKeyEncrypted(privateKeyEncryptedObj, password, res.data.username)
@@ -40,26 +52,36 @@ export default function ChatWindow({ socket, me, other, messages, setMessages, r
   }
 
   async function decryptAll() {
-    if (!privateCryptoKey) {
-      alert('Unlock your private key first.')
-      return
-    }
-    const decrypted = []
-    for (const m of messages) {
-      try{
-        if (m.metadata?.keyEncrypted && m.ciphertext) {
-          const plain = await decryptMessageWithPrivateKey(privateCryptoKey, { ciphertext: m.ciphertext, iv: m.metadata.iv, keyEncrypted: m.metadata.keyEncrypted })
-          decrypted.push({ ...m, plaintext: plain })
-        } else {
-          // fallback: show ciphertext
-          decrypted.push({ ...m, plaintext: '[no decrypt metadata]' })
-        }
-      }catch(err){
-        decrypted.push({ ...m, plaintext: '[decrypt error]' })
-      }
-    }
-    setMessages(decrypted)
+  if (!privateCryptoKey) {
+    alert("Unlock your private key first.");
+    return;
   }
+
+  const decrypted = [];
+
+  for (const m of messages) {
+    try {
+      // Only decrypt messages RECEIVED from the other user
+      if (m.from === other._id && m.metadata?.keyEncrypted && m.ciphertext) {
+        const plain = await decryptMessageWithPrivateKey(privateCryptoKey, {
+          ciphertext: m.ciphertext,
+          iv: m.metadata.iv,
+          keyEncrypted: m.metadata.keyEncrypted,
+        });
+
+        decrypted.push({ ...m, plaintext: plain });
+      } else {
+        // Leave your OWN messages untouched
+        decrypted.push(m);
+      }
+    } catch (err) {
+      decrypted.push({ ...m, plaintext: "[decrypt error]" });
+    }
+  }
+
+  setMessages(decrypted);
+}
+
 
   return (
     <div>
@@ -73,13 +95,17 @@ export default function ChatWindow({ socket, me, other, messages, setMessages, r
 
       <div className="message-list">
         {messages.map(m => (
-          <div key={m._id || m.timestamp} className={`message ${m.from === other._id ? 'incoming' : 'outgoing'}`}>
+          <div key={m._id || m.timestamp} className={`message ${String(m.from) === String(other._id) ? 'incoming' : 'outgoing'}`}
+>
             <div className="meta">
               <strong>{m.from === other._id ? other.username : 'You'}</strong>
               <small>{new Date(m.timestamp).toLocaleString?.() || ''}</small>
             </div>
             <div className="body">
-              <pre style={{ whiteSpace: 'pre-wrap', margin:0 }}>{m.plaintext ?? (m.ciphertext?.slice?.(0,200) || '[file]')}</pre>
+             <pre style={{ whiteSpace: 'pre-wrap', margin:0 }}>
+  {m.plaintext || m.ciphertext || '[no content]'}
+</pre>
+
             </div>
           </div>
         ))}

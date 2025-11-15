@@ -19,7 +19,7 @@ export default function MessageInput({ socket, other, setMessages }) {
       if (!data.publicKey) throw new Error('Recipient public key not available')
 
       const payload = await encryptMessageWithRemotePublicKey(data.publicKey, text)
-      socket.emit('send_message', { to: other._id, algorithm: 'AES', ciphertext: payload.ciphertext, metadata: { iv: payload.iv, keyEncrypted: payload.keyEncrypted } })
+      socket.emit('send_message', { to: other.id || other._id, algorithm: 'AES', ciphertext: payload.ciphertext, metadata: { iv: payload.iv, keyEncrypted: payload.keyEncrypted } })
       setMessages(m => [...m, { _id: `local-${Date.now()}`, from: 'me', to: other._id, algorithm: 'AES', ciphertext: payload.ciphertext, metadata:{ iv: payload.iv }, timestamp: new Date(), plaintext: text }])
       setText('')
     }catch(err){

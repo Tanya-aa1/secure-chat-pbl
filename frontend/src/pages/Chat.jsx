@@ -14,6 +14,10 @@ export default function Chat() {
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState([])
 
+  // =======================
+  //   INIT SOCKET + USER
+  // =======================
+
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) {
@@ -21,8 +25,14 @@ export default function Chat() {
       return
     }
 
+    // 🔥 Decode JWT to get user id + username
+    const decoded = JSON.parse(atob(token.split('.')[1]))
+    setMe({ _id: decoded.id, username: decoded.username })
+
+    // Create socket
     const s = io(API, { auth: { token } })
-    console.log("Token being sent:", token)
+    setSocket(s)
+
     s.on('connect_error', (err) => {
       console.error('socket error', err)
       if (err.message === 'Authentication error') {
@@ -30,15 +40,51 @@ export default function Chat() {
         window.location.href = '/login'
       }
     })
-    s.on('message', (msg) => {
-      setMessages((m) => [...m, msg])
-    })
-    setSocket(s)
-    setMe({ token })
+
     return () => s.close()
   }, [])
 
-  // Load initial contact list (all users)
+
+  // ============================
+  //   REGISTER USER IN SOCKET
+  // ============================
+
+  useEffect(() => {
+    if (socket && me?._id) {
+      console.log("Registering socket room for:", me._id)
+      socket.emit("register-user", me._id)
+    }
+  }, [socket, me])
+
+
+
+  // =====================================
+  //   FIXED RECEIVE MESSAGE HANDLER
+  // =====================================
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handler = (msg) => {
+      console.log("Received message:", msg);
+
+      // Only display messages from the currently selected chat user
+      if (selectedUser && msg.from === selectedUser._id) {
+        setMessages(prev => [...prev, msg]);
+      }
+    };
+
+    // socket.on("receive_message", handler);
+
+    return () => socket.off("receive_message", handler);
+  }, [socket, selectedUser]);
+
+
+
+  // =======================
+  //   LOAD USERS LIST
+  // =======================
+
   useEffect(() => {
     (async () => {
       try {
@@ -53,6 +99,11 @@ export default function Chat() {
     })()
   }, [])
 
+
+  // =======================
+  //   LOAD MESSAGES
+  // =======================
+
   async function loadMessages(withUserId) {
     const token = localStorage.getItem('token')
     const res = await axios.get(`${API}/api/messages?with=${withUserId}`, {
@@ -66,11 +117,16 @@ export default function Chat() {
     await loadMessages(u._id)
   }
 
-  // Handle user search
+
+  // =======================
+  //   USER SEARCH
+  // =======================
+
   async function handleSearch(e) {
     const value = e.target.value
     setSearch(value)
     const token = localStorage.getItem('token')
+
     try {
       const res = await axios.get(
         `${API}/api/users/search?q=${encodeURIComponent(value)}`,
@@ -86,10 +142,16 @@ export default function Chat() {
 
   const displayList = search ? searchResults : users
 
+
+  // =======================
+  //   RENDER UI
+  // =======================
+
   return (
     <div className="chat-area">
       <aside className="contacts">
         <h3>Contacts</h3>
+
         <input
           type="text"
           placeholder="Search users..."
@@ -97,7 +159,9 @@ export default function Chat() {
           onChange={handleSearch}
           style={{ width: '90%', margin: '8px 0', padding: '5px' }}
         />
+
         {displayList.length === 0 && <div>No users found</div>}
+
         {displayList.map((u) => (
           <div
             key={u._id}

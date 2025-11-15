@@ -64,18 +64,52 @@ io.use((socket, next) => {
 
 
 // === Socket.IO ===
+// io.on("connection", (socket) => {
+//   console.log(`✅ User connected: ${socket.id}, userId: ${socket.userId}`)
+
+//   socket.on("register-user", (userId) => {
+//     socket.join(userId)
+//     console.log(`User ${userId} joined their room`)
+//   })
+
+//   socket.on("send_message", (data) => {
+//   const { to, message } = data
+
+//   // Send message to receiver’s room
+//   socket.to(to).emit("receive-message", {
+//     from: socket.userId,
+//     ...message
+//   })
+// })
+
+
+//   socket.on("disconnect", () => {
+//     console.log("❌ User disconnected:", socket.id)
+//   })
+// })
 io.on("connection", (socket) => {
-  console.log(`✅ User connected: ${socket.id}, userId: ${socket.userId}`)
+  console.log("User connected", socket.userId)
 
   socket.on("register-user", (userId) => {
     socket.join(userId)
-    console.log(`User ${userId} joined their room`)
   })
 
-  socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id)
+  // 🟢 FIX: match frontend event name
+  socket.on("send_message", (data) => {
+    const { to, ciphertext, metadata, algorithm } = data
+
+    console.log("Forwarding message to:", to)
+
+    socket.to(to).emit("receive_message", {
+      from: socket.userId,
+      ciphertext,
+      metadata,
+      algorithm,
+      timestamp: new Date()
+    })
   })
 })
+
 
 // === Start server ===
 const PORT = process.env.PORT || 4000
